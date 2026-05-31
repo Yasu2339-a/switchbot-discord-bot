@@ -8,23 +8,27 @@ import base64
 import requests
 import os
 
-# Renderの環境変数から秘密の鍵を読み込む
+# 【修正】Renderの画面（KEY）と完全に名前を一致させました
 DISCORD_TOKEN = os.environ.get("DISCORD_TOKEN")
 ACCESS_TOKEN = os.environ.get("SWITCHBOT_TOKEN")
-CLIENT_SECRET = os.environ.get("SWITCHBOT_SECRET")
-DEVICE_ID = os.environ.get("SWITCHBOT_DEVICE_ID")
+CLIENT_SECRET = os.environ.get("CLIENT_SECRET")  # SWITCHBOT_SECRET から修正
+DEVICE_ID = os.environ.get("DEVICE_ID")          # SWITCHBOT_DEVICE_ID から修正
 
 def make_switchbot_headers():
+    # 【超重要】Renderから読み込んだ値が空（None）だった場合の安全装置を追加
+    token = ACCESS_TOKEN or ""
+    secret_key = CLIENT_SECRET or ""
+    
     nonce = str(uuid.uuid4())
     t = str(int(round(time.time() * 1000)))
-    string_to_sign = f'{ACCESS_TOKEN}{t}{nonce}'
+    string_to_sign = f'{token}{t}{nonce}'
     string_to_sign = bytes(string_to_sign, 'utf-8')
-    secret = bytes(CLIENT_SECRET, 'utf-8')
+    secret = bytes(secret_key, 'utf-8')
     sign = base64.b64encode(hmac.new(secret, msg=string_to_sign, digestmod=hashlib.sha256).digest())
     
     return {
-        'Authorization': ACCESS_TOKEN,
-        'API_Header': ACCESS_TOKEN,
+        'Authorization': token,
+        'API_Header': token,
         'Content-Type': 'application/json; charset=utf8',
         't': t,
         'sign': str(sign, 'utf-8'),
@@ -32,6 +36,10 @@ def make_switchbot_headers():
     }
 
 def control_tape_light(command):
+    if not DEVICE_ID:
+        print("エラー: DEVICE_ID が設定されていません。")
+        return False
+        
     url = f"https://api.switch-bot.com/v1.1/devices/{DEVICE_ID}/commands"
     headers = make_switchbot_headers()
     data = {
@@ -41,6 +49,7 @@ def control_tape_light(command):
     }
     try:
         response = requests.post(url, headers=headers, json=data)
+        print(f"SwitchBot Response: {response.status_code} - {response.text}")
         return response.status_code == 200
     except Exception as e:
         print(f"API Error: {e}")
@@ -72,7 +81,7 @@ async def light_control(interaction: discord.Interaction, action: app_commands.C
     if success:
         await interaction.followup.send(f"テープライトを{status_text}にしました！")
     else:
-        await interaction.followup.send("SwitchBot APIの呼び出しに失敗しました。環境変数やDevice IDを確認してください。")
+        await interaction.followup.send("SwitchBot APIの呼び出しに失敗しました。RenderのLogsを確認してください。")
 
 if DISCORD_TOKEN:
     bot.run(DISCORD_TOKEN)
